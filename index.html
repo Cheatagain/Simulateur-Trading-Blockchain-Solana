@@ -1,0 +1,1582 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <title>Simulation Trading Dexscreener</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 10px;
+      display: flex;
+      gap: 20px;
+      background-color: #121212;
+      color: white;
+    }
+    #dexscreener-embed {
+      position: relative;
+      width: 100%;
+      padding-bottom: 60%;
+      background-color: #1c1c1c;
+
+    }
+    #dexscreener-embed iframe {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      top: 0;
+      left: 0;
+      border: 0;
+    }
+    #search-container {
+      width: 40%;
+      display: flex;
+      flex-direction: column;
+    }
+    input, button {
+      font-size: 14px;
+      margin: 5px 0;
+      padding: 8px;
+      border-radius: 5px;
+      border: none;
+    }
+    #config-form {
+      background-color: #222;
+      padding: 5px;
+      margin-top: 5px;
+      border-radius: 5px;
+    }
+    #results {
+      border: 1px solid #555;
+      max-height: 250px;
+      overflow-y: auto;
+      display: none;
+      background-color: #222;
+      border-radius: 5px;
+    }
+    .result-item {
+      padding: 8px;
+      cursor: pointer;
+      border-bottom: 1px solid #444;
+    }
+    .result-item:hover {
+      background-color: #333;
+    }
+    #token-info, #ohlc-data {
+      margin-top: 10px;
+      background-color: #222;
+      padding: 15px;
+      border-radius: 5px;
+    }
+    .notification {
+      margin: 5px 0;
+      padding: 8px;
+      border-radius: 5px;
+      background-color: #113311;
+    }
+	.ai-confirmation {
+    border-left: 3px solid #4CAF50;
+    padding-left: 10px;
+    margin: 10px 0;
+	}
+	</style>
+	<!-- Chargement des figures de trading -->
+	<script src="figures.signal.achat.js"></script> <!-- Chargement des figures de trading -->
+	<script src="IA/DoubleBottomConfirmer.js"></script> 
+</head>
+<body>
+  <div id="dexscreener-embed">
+    <span id="placeholder-message">Merci de choisir un token</span>
+  </div>
+
+  <div id="search-container">
+    <h2>Recherche de Token</h2>
+    <input type="text" id="search" placeholder="🔍 Nom, symbole ou adresse..." autocomplete="off" />
+    
+    <div id="results"></div>
+    <div id="token-info"></div>
+    <div id="config-form" style="display: none;">
+  <h3>Paramètres</h3>
+  <div style="display: flex; justify-content: space-between;">
+    <div>
+      <h4>Paramètres du Simulateur</h4>
+	       <label for="timeframe-select">Timeframe:</label>
+      <select id="timeframe-select">
+          <option value="1" selected>1m</option>
+          <option value="5" >5m</option>
+          <option value="15">15m</option>
+          <option value="60">1h</option>
+      </select><br/><br/>
+	  <label><input type="checkbox" id="enable-PositiveVariation" checked /> Détection Positive Variation</label><br/>
+	  <label><input type="checkbox" id="enable-fvg" checked /> Détection FVG</label><br/>
+	  <label><input type="checkbox" id="enable-double-bottom" checked /> Détection Double Bottom</label><br/>
+	  <label><input type="checkbox" id="enable-triple-bottom" checked /> Détection Triple Bottom Prix Temps Reel</label><br/>
+	  <div id="triple-bottom-status" style="margin-top:5px; font-size:14px; color:gray;"></div>
+	  <label><input type="checkbox" id="enable-BullishRectangle" checked /> Détection BullishRectangle</label><br/>
+	  <label><input type="checkbox" id="enable-InvertedHeadAndShoulders" checked /> Détection Inverted Head & Shoulders</label><br/>
+	  <label><input type="checkbox" id="enable-DoubleBottomBullishRectangleCombo" checked /> Détection Combo Double Bottom & BullishRectangle</label><br/>
+	  <label><input type="checkbox" id="enable-InvertedHSDoubleBottomCombo" checked /> Détection Combo Inverted HS & DB</label><br/>
+      <label><input type="checkbox" id="enable-hammer" checked /> Détection Hammer</label><br/>
+      <label><input type="checkbox" id="enable-engulfing" checked /> Détection Bullish Engulfing</label><br/>
+      <label>Take Profit (%) : <input type="number" id="tp-input" value="10" /></label><br/>
+      <label>Trailing Stop (%) : <input type="number" id="trailing-input" value="10" /></label><br/>
+	  <label>Stop Loss (%) : <input type="number" id="sl-input" value="25" /></label><br/>
+      <label>Max Stop Loss : <input type="number" id="max-sl-input" value="3" /></label><br/>
+	  
+    </div>
+    
+    <div>
+      <h4>Paramètres TRADE DBOT API </h4>
+	  <label>Montant du Trade (SOL) : <input type="number" id="trade-amount" value="0.00" step="0.01" min="0" /></label><br/>
+    </div>
+  </div>
+  
+  <div style="margin-top: 20px;">
+    <button onclick="updateConfig()">Mettre à jour</button>
+    <button id="simulate-detection" style="padding: 10px; margin: 10px; background-color: #444; color: white; border: none; border-radius: 5px;">🚀 Simuler un Double Bottom</button>
+	<button id="simulate-triple-bottom" style="padding: 10px; margin: 10px; background-color: #444; color: white; border: none; border-radius: 5px;">🔺 Simuler un Triple Bottom</button>
+    <button id="simulate-trailing" style="padding: 10px; margin: 10px; background-color: #444; color: white; border: none; border-radius: 5px;">🎯 Simuler un Trailing Stop</button>
+  </div>
+ 
+</div>
+<div id="log"></div>
+<div id="triple-bottom-status"></div>
+<div id="ohlc-data"></div>
+
+  <script>
+  
+ 
+	// 1. Définir les variables globales)
+    const searchInput = document.getElementById("search");
+    const resultsDiv = document.getElementById("results");
+    const tokenInfoDiv = document.getElementById("token-info");
+    const chartContainer = document.getElementById("dexscreener-embed");
+    const ohlcDataDiv = document.getElementById("ohlc-data");
+    const configFormDiv = document.getElementById("config-form");
+	const minDetectionDelay = 300000; // 60 secondes entre les détections
+	const minTradeDelay = 60000; // 60 secondes en millisecondes
+	const logDiv = document.getElementById("log");
+	// Récupère le selection du timeframe et initialise la valeur globale
+	window.selectedTimeframe = parseInt(document.querySelector('#timeframe-select').value, 10);
+
+	// Mettre à jour si l'utilisateur change le select
+	document.querySelector('#timeframe-select').addEventListener('change', (e) => {
+    window.selectedTimeframe = parseInt(e.target.value, 10);
+    console.log("Timeframe mis à jour :", window.selectedTimeframe, "minutes");
+	});
+	
+	
+
+	
+	let selectedPair = null;
+    let priceUpdateInterval = null;
+    let priceHistory = [];
+    let activeTrade = null;
+    let stopLossCounter = 0;
+    let ohlcSeries = [];
+    let lastTokenUpdate = null;
+	let lastDetectionTime = 0;
+	let lastTradeTime = 0;
+	
+
+	window.priceHistory = window.priceHistory || [];
+
+
+    let config = {
+      sl: 25,
+      tp: 10,
+      trailing: 10,
+      maxSL: 3,
+	  detectPositiveVariation: false,
+	  detectBullishFVGUnderFib: false,
+	  detectDoubleBottom: false,
+	  detectTripleBottom: false,
+	  detectBullishRectangle: false,
+	  detectInvertedHeadAndShoulders: false,
+	  detectDoubleBottomBullishRectangleCombo: false,
+	  detectInvertedHSDoubleBottomCombo: false,
+      detectHammer: false,
+      detectEngulfing: false,
+	 };
+
+    // Initialisation
+    fetch('/configParams')
+      .then(response => response.json())
+      .then(data => {
+        // Met à jour la config locale
+        Object.assign(config, data);
+        
+        // Met à jour les champs du formulaire
+        document.getElementById("sl-input").value = data.sl;
+        document.getElementById("tp-input").value = data.tp;
+        document.getElementById("trailing-input").value = data.trailing;
+        document.getElementById("max-sl-input").value = data.maxSL;
+		document.getElementById("enable-PositiveVariation").checked = data.detectPositiveVariation !== false;
+		document.getElementById("enable-fvg").checked = data.detectBullishFVGUnderFib !== false;
+		document.getElementById("enable-double-bottom").checked = data.detectDoubleBottom !== false;
+		document.getElementById("enable-triple-bottom").checked = data.detectTripleBottom !== false;
+		document.getElementById("enable-BullishRectangle").checked = data.detectBullishRectangle !== false;
+		document.getElementById("enable-InvertedHeadAndShoulders").checked = data.detectInvertedHeadAndShoulders !== false;
+		document.getElementById("enable-DoubleBottomBullishRectangleCombo").checked = data.detectDoubleBottomBullishRectangleCombo !== false;
+		document.getElementById("enable-InvertedHSDoubleBottomCombo").checked = data.detectInvertedHSDoubleBottomCombo !== false;
+        document.getElementById("enable-hammer").checked = data.detectHammer !== false;
+        document.getElementById("enable-engulfing").checked = data.detectEngulfing !== false;
+
+		
+        // Si un token est configuré, on le charge
+        if (data.searchToken) {
+          searchInput.value = data.searchToken;
+          if (data.searchToken.length >= 2) {
+            searchInput.dispatchEvent(new Event('input'));
+          }
+        }
+      })
+      .catch(console.error);
+
+    // Vérifie périodiquement les mises à jour
+    setInterval(async () => {
+      try {
+        const res = await fetch('/configParams');
+        const data = await res.json();
+        
+        // Met à jour le token si nécessaire
+        if (data.lastTokenUpdate && data.lastTokenUpdate !== lastTokenUpdate) {
+          lastTokenUpdate = data.lastTokenUpdate;
+          if (data.searchToken && data.searchToken !== searchInput.value) {
+            searchInput.value = data.searchToken;
+            const inputEvent = new Event('input', { bubbles: true });
+            searchInput.dispatchEvent(inputEvent);
+            
+            // Attendre et sélectionner le premier résultat
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            const firstResult = document.querySelector('.result-item');
+            if (firstResult) {
+              firstResult.click();
+              addNotification("Token chargé automatiquement depuis Telegram");
+            }
+          }
+        }
+        
+        // Met à jour les autres paramètres
+        if (data.sl != config.sl) document.getElementById("sl-input").value = data.sl;
+        if (data.tp != config.tp) document.getElementById("tp-input").value = data.tp;
+        if (data.trailing != config.trailing) document.getElementById("trailing-input").value = data.trailing;
+        if (data.maxSL != config.maxSL) document.getElementById("max-sl-input").value = data.maxSL;
+		if (data.detectPositiveVariation != config.detectPositiveVariation) document.getElementById("enable-PositiveVariation").checked = data.detectPositiveVariation;
+		if (data.detectBullishFVGUnderFib != config.detectBullishFVGUnderFib) document.getElementById("enable-fvg").checked = data.detectBullishFVGUnderFib;
+		if (data.detectDoubleBottom != config.detectDoubleBottom) document.getElementById("enable-double-bottom").checked = data.detectDoubleBottom;
+        if (data.detectTripleBottom != config.detectTripleBottom) document.getElementById("enable-triple-bottom").checked = data.detectTripleBottom;
+		if (data.detectBullishRectangle != config.detectBullishRectangle) document.getElementById("enable-BullishRectangle").checked = data.detectBullishRectangle;
+		if (data.detectInvertedHeadAndShoulders != config.detectInvertedHeadAndShoulders) document.getElementById("enable-InvertedHeadAndShoulders").checked = data.detectInvertedHeadAndShoulders;
+		if (data.detectDoubleBottomBullishRectangleCombo != config.detectDoubleBottomBullishRectangleCombo) document.getElementById("enable-DoubleBottomBullishRectangleCombo").checked = data.detectDoubleBottomBullishRectangleCombo;
+		if (data.detectInvertedHSDoubleBottomCombo != config.detectInvertedHSDoubleBottomCombo) document.getElementById("enable-InvertedHSDoubleBottomCombo").checked = data.detectInvertedHSDoubleBottomCombo;
+		if (data.detectHammer != config.detectHammer) document.getElementById("enable-hammer").checked = data.detectHammer;
+        if (data.detectEngulfing != config.detectEngulfing) document.getElementById("enable-engulfing").checked = data.detectEngulfing;
+	
+        
+        // Met à jour la config locale
+        Object.assign(config, data);
+        
+      } catch (err) {
+        console.error('Erreur vérification token:', err);
+      }
+    }, 1000);
+	
+
+    function addNotification(message) {
+      const notification = document.createElement('div');
+      notification.className = 'notification';
+      notification.textContent = message;
+      tokenInfoDiv.prepend(notification);
+      setTimeout(() => notification.remove(), 5000);
+    }
+
+	function displayAIConfirmation(analysis) {
+    const confirmationDiv = document.createElement('div');
+    confirmationDiv.className = 'ai-confirmation';
+    confirmationDiv.innerHTML = `
+        <div style="background:#113311;padding:10px;border-radius:5px;margin-top:10px;">
+            <strong>🧠 CONFIRMATION IA</strong>
+            <p>Confiance: <strong>${Math.round(analysis.confidence * 100)}%</strong></p>
+            <p>SL recommandé: <strong>${analysis.recommendedSl.toFixed(6)}</strong></p>
+            ${analysis.details.insights ? `<p>${analysis.details.insights.join('<br>')}</p>` : ''}
+        </div>
+    `;
+    tokenInfoDiv.appendChild(confirmationDiv);
+	}
+
+    function updateConfig() {
+      config.sl = parseFloat(document.getElementById("sl-input").value);
+      config.tp = parseFloat(document.getElementById("tp-input").value);
+      config.trailing = parseFloat(document.getElementById("trailing-input").value);
+      config.maxSL = parseInt(document.getElementById("max-sl-input").value);
+	  config.tradeAmount = parseFloat(document.getElementById("trade-amount").value);
+	  config.detectPositiveVariation = document.getElementById("enable-PositiveVariation").checked;
+	  config.detectBullishFVGUnderFib = document.getElementById("enable-fvg").checked;
+	  config.detectDoubleBottom = document.getElementById("enable-double-bottom").checked;
+	  config.detectTripleBottom = document.getElementById("enable-triple-bottom").checked;
+	  config.detectBullishRectangle = document.getElementById("enable-BullishRectangle").checked;
+	  config.detectInvertedHeadAndShoulders = document.getElementById("enable-InvertedHeadAndShoulders").checked;
+	  config.detectDoubleBottomBullishRectangleCombo = document.getElementById("enable-DoubleBottomBullishRectangleCombo").checked;
+	  config.detectInvertedHSDoubleBottomCombo = document.getElementById("enable-InvertedHSDoubleBottomCombo").checked;
+      config.detectHammer = document.getElementById("enable-hammer").checked;
+      config.detectEngulfing = document.getElementById("enable-engulfing").checked;
+	  // ✅ Mise à jour du timeframe global
+	  config.timeframeSelect = document.getElementById("timeframe-select").value;
+	  window.selectedTimeframe = config.timeframeSelect;
+      console.log("⏱️ Timeframe mis à jour :", window.selectedTimeframe);
+	 
+	 
+      
+      fetch('/updateConfig', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+      }).then(() => addNotification("Paramètres mis à jour !"))
+        .catch(err => console.error(err));
+    }
+
+    function updateOHLC(price) {
+    const now = new Date();
+    const timeframe = window.selectedTimeframe || 1; <!-- // fallback 1 min -->
+    const currentSlot = Math.floor(now.getMinutes() / timeframe); <!-- // "slot" du timeframe -->
+
+    if (!ohlcSeries.length || ohlcSeries[ohlcSeries.length - 1].timeSlot !== currentSlot) {
+        <!-- // Nouvelle bougie -->
+        ohlcSeries.push({
+            open: price,
+            high: price,
+            low: price,
+            close: price,
+            timeSlot: currentSlot,
+            timestamp: now.getTime()
+        });
+        if (ohlcSeries.length > 200) ohlcSeries.shift();
+        detectCandlestickPatterns();
+    } else {
+       <!--  // Mettre à jour la bougie existante -->
+        const last = ohlcSeries[ohlcSeries.length - 1];
+        last.high = Math.max(last.high, price);
+        last.low = Math.min(last.low, price);
+        last.close = price;
+		}
+	}
+
+
+    function isHammer(candle) {
+      const body = Math.abs(candle.close - candle.open);
+      const range = candle.high - candle.low;
+      const lowerWick = Math.min(candle.open, candle.close) - candle.low;
+      return body < range * 0.3 && lowerWick > body * 2 && candle.close > candle.open;
+    }
+
+    function isBullishEngulfing(prev, curr) {
+      return (
+        prev.close < prev.open &&
+        curr.close > curr.open &&
+        curr.open < prev.close &&
+        curr.close > prev.open
+      );
+    }
+
+    function detectCandlestickPatterns() {
+      if (ohlcSeries.length < 3) return;
+
+      const prevCandle = ohlcSeries[ohlcSeries.length - 2];
+      const currentCandle = ohlcSeries[ohlcSeries.length - 1];
+      
+      if (config.detectHammer && isHammer(currentCandle)) {
+        const message = `🔨 Hammer détecté sur ${selectedPair?.baseToken?.symbol || 'Token'} à ${currentCandle.close}`;
+        addNotification(message);
+        sendTelegramMessage(message);
+      }
+      
+      if (config.detectEngulfing && isBullishEngulfing(prevCandle, currentCandle)) {
+        const message = `📈 Bullish Engulfing détecté sur ${selectedPair?.baseToken?.symbol || 'Token'} à ${currentCandle.close}`;
+        addNotification(message);
+        sendTelegramMessage(message);
+      }
+    }
+
+    searchInput.addEventListener("input", async () => {
+      if (priceUpdateInterval) clearInterval(priceUpdateInterval);
+      selectedPair = null;
+      tokenInfoDiv.innerHTML = "";
+      chartContainer.innerHTML = '<span id="placeholder-message">Merci de choisir un token</span>';
+      ohlcDataDiv.innerHTML = "";
+      configFormDiv.style.display = "none";
+      priceHistory = [];
+      ohlcSeries = [];
+      activeTrade = null;
+      stopLossCounter = 0;
+
+      const query = searchInput.value.trim();
+      if (query.length < 2) {
+        resultsDiv.style.display = "none";
+        return;
+      }
+
+      try {
+        const res = await fetch(`https://api.dexscreener.com/latest/dex/search/?q=${encodeURIComponent(query)}`);
+        const data = await res.json();
+
+        resultsDiv.innerHTML = "";
+        if (data.pairs && data.pairs.length > 0) {
+          data.pairs.slice(0, 10).forEach((pair) => {
+            const item = document.createElement("div");
+            item.className = "result-item";
+            item.innerHTML = `<strong>${pair.baseToken.symbol}</strong> - ${pair.baseToken.name}<br/><small>${pair.chainId.toUpperCase()} | ${pair.dexId.toUpperCase()}</small>`;
+            item.onclick = () => displayTokenInfo(pair);
+            resultsDiv.appendChild(item);
+          });
+          resultsDiv.style.display = "block";
+        } else {
+          resultsDiv.style.display = "none";
+        }
+      } catch (err) {
+        console.error("Erreur de recherche :", err);
+      }
+    });
+
+    function extractPairIdFromUrl(url) {
+      const match = url.match(/dexscreener\.com\/([^\/]+)\/([^\/?#]+)/);
+      if (match) return { chain: match[1], pairId: match[2] };
+      return null;
+    }
+
+// À placer AVANT la fonction displayTokenInfo
+const decimalsCache = new Map(); // Stockage mémoire des décimales
+
+async function getTokenDecimals(mint) {
+  // Si déjà en cache, retourne immédiatement
+  if (decimalsCache.has(mint)) return decimalsCache.get(mint);
+
+  // Sinon, requête unique via Jupiter Token List
+  const response = await fetch('https://token.jup.ag/strict');
+  const tokens = await response.json();
+  const token = tokens.find(t => t.address === mint);
+  const decimals = token?.decimals || 9; // Fallback technique interne
+  
+  decimalsCache.set(mint, decimals); // Mise en cache
+  return decimals;
+}
+
+    async function displayTokenInfo(pair) {
+      resultsDiv.style.display = "none";
+      searchInput.value = `${pair.baseToken.symbol} - ${pair.baseToken.name}`;
+      selectedPair = pair;
+      const price = parseFloat(pair.priceUsd || 0);
+	  const timeframeSelect = document.getElementById("timeframe-select"); // <-- ajout
+	  const timeframe = timeframeSelect.value;
+      console.log("⏱ Timeframe sélectionné:", timeframe);
+	 	  
+
+      tokenInfoDiv.innerHTML = `
+        <h2>Informations sur le Token</h2>
+        <p><strong>Nom :</strong> ${pair.baseToken.name}</p>
+        <p><strong>Symbole :</strong> ${pair.baseToken.symbol}</p>
+        <p><strong>Adresse :</strong> ${pair.baseToken.address}</p>
+        <p><strong>DEX :</strong> ${pair.dexId}</p>
+        <p><strong>Chain :</strong> ${pair.chainId}</p>
+        <p><strong>Prix USD :</strong> <span id="price">${price}</span></p>
+        <p><a href="${pair.url}" target="_blank">🔗 Voir sur Dexscreener</a></p>
+        <p id="price-error" style="color:red;"></p>
+      `;
+
+      configFormDiv.style.display = "block";
+
+      const ids = extractPairIdFromUrl(pair.url);
+      if (ids) {
+        chartContainer.innerHTML = `
+          <iframe src="https://dexscreener.com/${ids.chain}/${ids.pairId}?embed=1&chartTheme=dark&theme=dark&interval=${timeframeSelect}" allowfullscreen></iframe>
+        `;
+      }
+
+       if (priceUpdateInterval) clearInterval(priceUpdateInterval);
+
+		// 1. Chargement UNIQUE des décimales au début
+		if (!decimalsCache.has(pair.baseToken.address)) {
+		await getTokenDecimals(pair.baseToken.address);
+		}
+		
+		// Récupération des décimales avec log supplémentaire
+  const baseDecimals = decimalsCache.get(pair.baseToken.address) || 9;
+  console.log(`Configuration pour ${pair.baseToken.symbol}: 
+    Adresse: ${pair.baseToken.address}
+    Décimales: ${baseDecimals}
+    Type: ${baseDecimals === 6 ? 'Standard (6)' : baseDecimals === 9 ? 'Précision (9)' : 'Personnalisé ('+baseDecimals+')'}`);
+
+priceUpdateInterval = setInterval(async () => {
+    try {
+        if (pair.chainId !== 'solana') {
+            throw new Error("Seul Solana est supporté");
+        }
+
+        <!-- // 1. Vérification des paramètres de base -->
+			const baseTokenAddress = pair.baseToken.address;
+		<!-- // Définition d’une variable globale -->
+			window.currentTokenAddress = baseTokenAddress;
+			console.log("Adresse du token depuis index.html :", window.currentTokenAddress);
+			
+        if (!baseTokenAddress || baseTokenAddress.length < 30) {
+            throw new Error("Adresse du token invalide");
+        }
+		
+		// 2. Configuration des décimales
+        const baseDecimals = decimalsCache.get(baseTokenAddress) || 9;
+		console.debug(`Calcul prix pour ${pair.baseToken.symbol} (${baseDecimals}d)`);
+        const quoteDecimals = 6; // USDC
+        const amountIn = Math.pow(10, baseDecimals); // 1 token entier
+
+        // 3. Construction de la requête avec vérification
+        const url = new URL("https://lite-api.jup.ag/swap/v1/quote");
+        const params = {
+            inputMint: baseTokenAddress,
+            outputMint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            amount: amountIn.toString(),
+            slippageBps: "50",
+            restrictIntermediateTokens: "true"
+        };
+
+        Object.entries(params).forEach(([key, value]) => {
+            url.searchParams.append(key, value);
+        });
+
+        console.log("Requête envoyée à Jupiter:", url.toString()); // Debug
+
+        // 4. Requête avec timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        
+        const response = await fetch(url.toString(), {
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            throw new Error(`Erreur HTTP ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log("Réponse complète de l'API Jupiter:", data); // Debug
+
+        // 5. Validation stricte de la réponse
+        if (!data?.outAmount || isNaN(data.outAmount) || data.outAmount <= 0) {
+            throw new Error("Réponse API invalide: outAmount manquant ou nul");
+        }
+
+        // 6. Calcul PRÉCIS pour 0.001 token
+        const priceFor1Token = parseFloat(data.outAmount) / (10 ** quoteDecimals); // Prix pour 1 token en USDC
+        const priceFor001Token = priceFor1Token * 0.001; // Prix pour 0.001 token
+
+        if (priceFor001Token <= 0.000001) { // Seuil minimal réaliste ajusté
+            throw new Error(`Prix trop bas (${priceFor001Token}), probablement erroné`);
+        }
+
+        // 7. Formatage final avec 7 décimales
+        const formattedPrice = priceFor001Token.toLocaleString('en', {
+            minimumFractionDigits: 6,
+            maximumFractionDigits: 6
+        });
+
+        // 8. Mise à jour de l'UI
+        document.getElementById("price").textContent = formattedPrice;
+        document.getElementById("price-error").textContent = "";
+        
+        updateOHLC(priceFor001Token);
+        priceHistory.push(priceFor001Token);
+		
+        // Garde un historique optimal pour le MACD (100-150 points)
+        if (priceHistory.length > 150) {
+            priceHistory = priceHistory.slice(-100); // Conserve les 100 derniers points
+            console.debug(`Optimisation historique : 100 points conservés`);
+        }
+		
+        simulateTrading(priceFor001Token);
+
+    } catch (err) {
+        console.error("Erreur détaillée:", err);
+        document.getElementById("price-error").textContent = 
+            `Erreur: ${err.message.replace("Error: ", "")}`;
+        
+        // On conserve l'ancien prix au lieu de mettre 0
+        if (!document.getElementById("price").textContent) {
+            document.getElementById("price").textContent = "0.0000000";
+        }
+    }
+	
+}, 1500);
+
+    }
+
+  
+   async function sendTelegramMessage(message) {
+  try {
+    console.log("Envoi vers Telegram :", message);
+    
+    const response = await fetch('/sendTelegram', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        text: message,
+        // Optionnel : métadonnées supplémentaires
+        timestamp: new Date().toISOString(),
+        source: "trading-bot"
+      })
+    });
+
+    const result = await response.json();
+    
+    if (!response.ok || result.status !== 'success') {
+      throw new Error(result.error || "Échec de l'envoi");
+    }
+    
+    console.log("✅ Message envoyé. ID:", result.message_id);
+    return result.message_id; // Vous pouvez utiliser cet ID pour suivre le message
+  
+  } catch (e) {
+    console.error("❌ Échec de l'envoi :", e);
+    // Optionnel : afficher une notification à l'utilisateur
+    showErrorNotification(e.message);
+    throw e; // Propage l'erreur si nécessaire
+  }
+}
+
+
+// Fonctions utilitaires
+function calculateSimpleVolatility(prices, lookback = 20) {
+  const actualLookback = Math.min(lookback, prices.length - 1);
+  if (actualLookback < 2) return 0.02;
+  
+  let sumChanges = 0;
+  for (let i = 1; i <= actualLookback; i++) {
+    sumChanges += Math.abs(prices[i] - prices[i-1]) / prices[i-1];
+  }
+  return sumChanges / actualLookback;
+}
+
+function linearRegressionSlope(prices) {
+  const n = prices.length;
+  if (n < 2) return 0;
+  
+  let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+  
+  for (let i = 0; i < n; i++) {
+    sumX += i;
+    sumY += prices[i];
+    sumXY += i * prices[i];
+    sumXX += i * i;
+  }
+  
+  const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+  return slope / n; // Normalisation par le nombre de points
+}
+
+// Variable globale
+let lastDoubleBottomIndex = -1;
+let pauseUntil = 0; // Timestamp jusqu'à quand la détection est en pause
+
+
+function simulateTrading(price) {
+
+if (typeof detectTripleBottom !== 'function') {
+  console.error('Fonction detectTripleBottom non disponible');
+  return;
+}
+
+// 1. Vérification de la pause
+  const now = Date.now();
+  if (now < pauseUntil) {
+    console.log(`⏸ Détection en pause jusqu'à ${new Date(pauseUntil).toLocaleTimeString()}`);
+    return;
+  }
+
+ 
+  // 1. Vérification initiale stricte
+  if (!Array.isArray(priceHistory)) {
+    console.error('Réinitialisation de priceHistory');
+    priceHistory = [];
+    return;
+  }
+  
+  const logDiv = document.getElementById("token-info");
+  const minDetectionDelay = 60000; // Délai minimum entre 2 détections (1 minute )
+  
+
+  // Vérification des conditions de base pour un nouveau trade
+  if (!activeTrade && priceHistory.length >= 5 && stopLossCounter < config.maxSL) {
+    // Anti-détection trop fréquente
+    // Vérifie soit le délai de détection, soit le délai après trade
+	if (now - lastDetectionTime < minDetectionDelay || now - lastTradeTime < minTradeDelay) {
+    return;
+	}
+
+    let doubleBottomPrice = null;
+    let doubleBottomIndex = -1;
+	let tripleBottomPrice = null; // <-- Ajoutez cette ligne
+	let tripleBottomResult = null;
+	let lastFVGIndex = -1; // <-- ajouter cette ligne
+	
+	    
+		
+		
+		
+    // =============================================
+    // 1. CALCUL DE VOLATILITÉ POUR LE SEUIL DE TOLÉRANCE
+    // =============================================
+    const volatility = calculateSimpleVolatility(priceHistory);
+    // Tolerance dynamique (1.5x la volatilité) entre 1% et 5%
+    const tolerance = Math.min(0.05, Math.max(0.01, volatility * 1.5));
+	
+	// =============================================
+	// 1B. DÉTECTION DE VARIATION POSITIVE (5 MIN)
+	// =============================================
+	let positiveMove = null;
+	if (config.detectPositiveVariation) {
+    console.log("🔍 Détection de variation positive activée sur 5 min...");
+    console.log("📊 Historique de prix reçu :", priceHistory);
+
+    // Analyse sur les 5 dernières minutes, avec 0% comme seuil minimum
+    positiveMove = window.detectPositiveVariation(priceHistory, 5, 0);
+
+    if (!positiveMove) {
+        console.log("❌ Aucune variation positive détectée sur les 5 dernières minutes. Signal ignoré.");
+        return;
+    } else {
+        console.log("📈 Variation positive détectée :", positiveMove);
+		}
+	}
+
+// =============================================
+// 2A. DÉTECTION DU DOUBLE BOTTOM AVEC IA (ASYNC NON-BLOQUANTE)
+// =============================================
+if (config.detectDoubleBottom) {
+    console.log("🔍 Recherche de Double Bottom avec IA (activée)");
+
+    // 1. Détection technique de base (votre fonction existante)
+    const doubleBottomResult = window.detectDoubleBottom(
+        priceHistory,
+        tolerance,
+        price,
+        lastDoubleBottomIndex
+    );
+
+    if (doubleBottomResult) {
+        console.log("✅ Pattern technique détecté", {
+            minValue: doubleBottomResult.minValue,
+            confirmationLevel: doubleBottomResult.confirmationLevel,
+            index: doubleBottomResult.index
+        });
+
+        // 2. Vérification par l'IA seulement si le prix dépasse le niveau de confirmation
+        if (price > doubleBottomResult.confirmationLevel) {
+            console.log("📈 Prix au-dessus du niveau de confirmation - Vérification IA (async)...");
+
+            // Appel IA en arrière-plan
+            const iaConfirmer = new DoubleBottomConfirmer();
+            iaConfirmer.confirmPattern(
+                priceHistory.slice(doubleBottomResult.index),
+                selectedPair?.baseToken?.address || null
+            )
+            .then(iaAnalysis => {
+                console.log("🧠 Résultat IA:", iaAnalysis);
+
+                if (iaAnalysis.confirmed) {
+                    console.log("🎯 Double bottom confirmé par IA", {
+                        confidence: iaAnalysis.confidence,
+                        recommendedSl: iaAnalysis.recommendedSl
+                    });
+
+                    doubleBottomPrice = doubleBottomResult.minValue;
+                    doubleBottomIndex = doubleBottomResult.index;
+                    lastDetectionTime = Date.now();
+
+                    // Ajouter les insights IA à l'interface
+                    displayAIConfirmation(iaAnalysis);
+
+                } else {
+                    console.log("❌ Rejeté par IA:", iaAnalysis.details.reason);
+                    addNotification(`IA a rejeté le pattern: ${iaAnalysis.details.reason}`);
+                }
+            })
+            .catch(err => {
+                console.error("Erreur IA:", err);
+                addNotification(`Erreur lors de l'analyse IA : ${err.message}`);
+            });
+
+            // Ici, la recherche de tokens continue immédiatement
+        }
+    }
+}
+
+	
+	
+	
+	
+		
+	<!-- // ================================================ -->
+	<!-- // 2B1. DÉTECTION BULLISH FVG SOUS NIVEAU FIBONACCI -->
+	<!-- // ================================================ -->
+		let bullishFVGResult = null;
+		if (config.detectBullishFVGUnderFib && typeof window.detectBullishFVGUnderFib === 'function') {
+			console.log("🔍 Recherche de Bullish FVG sous Fibonacci (activée)");
+    
+			bullishFVGResult = window.detectBullishFVGUnderFib(
+			priceHistory,
+			50,           // lookback par défaut
+			0.5,          // ratio Fibonacci par défaut
+			price,        // prix actuel
+			lastFVGIndex  // dernière détection FVG pour éviter doublons
+		);
+
+		if (bullishFVGResult) {
+			console.log("✅ %cBullish FVG détecté", "color: blue", {
+            low: bullishFVGResult.low.toFixed(6),
+            high: bullishFVGResult.high.toFixed(6),
+            fibLevel: bullishFVGResult.fibLevel.toFixed(6),
+            entryPrice: bullishFVGResult.entryPrice.toFixed(6),
+            confirmationLevel: bullishFVGResult.confirmationLevel.toFixed(6)
+        });
+
+        if (price > bullishFVGResult.confirmationLevel) {
+            console.log("📈 %cPrix actuel AU-DESSUS du niveau de confirmation FVG", "color: green");
+            lastDetectionTime = Date.now();
+        } else {
+            console.log("📉 %cPrix actuel EN-DESSOUS du niveau de confirmation FVG", "color: red");
+        }
+
+        // Mettre à jour l'index de dernière détection pour éviter doublons
+        lastFVGIndex = bullishFVGResult.index;
+		} else {
+        console.log("❌ %cAucun Bullish FVG détecté sous Fibonacci", "color: grey");
+		}
+	}
+
+		
+	// =============================================
+    // 2C. DÉTECTION BULLISH RECTANGLE (SI ACTIVÉ)
+    // =============================================
+        let rectangleResult = null;
+        if (config.detectBullishRectangle) {
+            console.log("🔍 Recherche de Bullish Rectangle (activée)");
+            
+            // DEBUG Bullish Rectangle - Affichage des prix récents
+            const lastPrices = priceHistory.slice(-10).map(p => p.toFixed(6));
+            console.log("📊 Prix (10 derniers):", lastPrices.join(" → "));
+            
+            rectangleResult = window.detectBullishRectangle(
+                priceHistory,
+                tolerance,
+                price
+            );
+
+            if (rectangleResult) {
+                console.log("✅ %cBullish Rectangle détecté", "color: orange", {
+                    upperBound: rectangleResult.upperBound,
+                    lowerBound: rectangleResult.lowerBound,
+                    confirmationLevel: rectangleResult.confirmationLevel
+                });
+                
+                // DEBUG - Affichage des niveaux clés
+                console.log("📏 Niveaux:", 
+                    `Résistance: ${rectangleResult.upperBound.toFixed(6)} | ` +
+                    `Support: ${rectangleResult.lowerBound.toFixed(6)} | ` +
+                    `Confirmation: ${rectangleResult.confirmationLevel.toFixed(6)}`
+                );
+                
+                if (price > rectangleResult.confirmationLevel) {
+                    console.log("📈 %cPrix actuel AU-DESSUS du niveau de confirmation", "color: green");
+                    lastDetectionTime = Date.now();
+                } else {
+                    console.log("📉 %cPrix actuel EN-DESSOUS du niveau de confirmation", "color: red");
+                }
+            } else {
+                console.log("❌ %cAucun Bullish Rectangle détecté", "color: grey");
+            }
+		}
+   
+    // =============================================
+    // 2D. DÉTECTION COMBO INVERTED HEAD&SHOULDERS + DOUBLE BOTTOM (SI ACTIVÉ)
+    // =============================================
+		
+	const comboDetected = config.detectInvertedHSDoubleBottomCombo
+    ? window.detectInvertedHSDoubleBottomCombo(priceHistory, 0.03, price) //Votre tableau de prix historiques;Une tolérance de 3% pour les niveaux de prix;Le prix actuel
+    : null;
+	
+	if (config.detectInvertedHSDoubleBottomCombo) {
+		//DEBUG InvertedHeadShouldersDoubleBottomCombo
+		// 1. Affiche les prix avec flèches directionnelles (↗ ↘)
+		const lastPrices = priceHistory.slice(-10).map(p => p.toFixed(6));
+		console.log("Vérification des conditions pour Combo Inverted HS&DB");
+		console.log("📊 Prix (10 derniers):", lastPrices.join(" → "));
+		// 2. Détection H&S inversé avec icône visuel
+		const hsResult = window.detectInvertedHeadAndShoulders(priceHistory);
+		console.log(
+		hsResult ? "✅ %cH&S Inversé DÉTECTÉ" : "❌ %cAucun H&S Inversé", 
+		hsResult ? "color: green" : "color: grey",
+		hsResult || ""
+		);
+		// 3. Détection Double Bottom avec couleur conditionnelle
+		const dbResult = window.detectDoubleBottom(priceHistory);
+		console.log(
+		dbResult ? "✅ %cDouble Bottom DÉTECTÉ" : "❌ %cAucun Double Bottom", 
+		dbResult ? "color: blue" : "color: grey",
+		dbResult || ""
+		);
+	}	
+		console.groupEnd();
+		
+	<!-- // ================================================================= -->
+    <!-- // 2E. DÉTECTION COMBO DOUBLE BOTTOM + BULLISH RECTANGLE (SI ACTIVÉ) -->
+    <!-- // ================================================================= -->
+    const dbBrComboDetected = config.detectDoubleBottomBullishRectangleCombo
+        ? window.detectDoubleBottomBullishRectangleCombo(priceHistory, 0.025, price)
+        : null;
+
+    if (config.detectDoubleBottomBullishRectangleCombo) {
+        console.log("🔍 Recherche de Combo Double Bottom + Bullish Rectangle");
+
+        // DEBUG - Affichage des prix récents
+        const lastPrices = priceHistory.slice(-15).map(p => p.toFixed(6));
+        console.log("📊 Prix (15 derniers):", lastPrices.join(" → "));
+
+        // DEBUG - Détection séparée des composants
+        const dbResult = window.detectDoubleBottom(
+            priceHistory.slice(0, Math.floor(priceHistory.length / 2)),
+            0.03
+        );
+        console.log(
+            dbResult ? "✅ %cDouble Bottom DÉTECTÉ (première partie)" : "❌ %cAucun Double Bottom", 
+            dbResult ? "color: blue" : "color: grey",
+            dbResult || ""
+        );
+
+        const brResult = window.detectBullishRectangle(
+            priceHistory.slice(Math.floor(priceHistory.length / 2)),
+            0.025,
+            price
+        );
+        console.log(
+            brResult ? "✅ %cBullish Rectangle DÉTECTÉ (seconde partie)" : "❌ %cAucun Bullish Rectangle", 
+            brResult ? "color: orange" : "color: grey",
+            brResult || ""
+        );
+
+        // DEBUG - Affichage des résultats du combo
+        if (dbBrComboDetected) {
+            console.log("🔥 %cCOMBO DÉTECTÉ: Double Bottom + Bullish Rectangle", "color: purple; font-weight: bold", {
+                confirmationLevel: dbBrComboDetected.confirmationLevel,
+                doubleBottom: dbBrComboDetected.components.doubleBottom,
+                bullishRectangle: dbBrComboDetected.components.bullishRectangle
+            });
+
+            console.log("📏 Niveaux clés:", 
+                `Confirmation: ${dbBrComboDetected.confirmationLevel.toFixed(6)} | ` +
+                `DB Neckline: ${dbBrComboDetected.components.doubleBottom.confirmationLevel.toFixed(6)} | ` +
+                `BR Upper: ${dbBrComboDetected.components.bullishRectangle.upperBound.toFixed(6)}`
+            );
+
+            if (price > dbBrComboDetected.confirmationLevel) {
+                console.log("🚀 %cPrix AU-DESSUS du niveau de confirmation COMBO", "color: green; font-weight: bold");
+                lastDetectionTime = Date.now();
+            } else {
+                console.log("⏳ %cPrix EN-DESSOUS du niveau de confirmation COMBO", "color: orange");
+            }
+        } else {
+            console.log("❌ %cAucun combo Double Bottom + Bullish Rectangle valide", "color: grey");
+        }
+    }	
+	
+	// =============================================
+    // 2B. DÉTECTION TRIPLE BOTTOM PRIX TEMPS REEL
+    // =============================================
+		const closes = ohlcSeries.map(c => c.close);
+		window.closes = closes;  // maintenant accessibles depuis l’extérieur
+		const timeframeSelect = document.getElementById("timeframe-select");
+		const timeframe = timeframeSelect ? timeframeSelect.value : "1"; 
+		const statusEl = document.getElementById("triple-bottom-status");
+		// Dernier prix connu pour la détection
+		const price = closes[closes.length - 1];
+		window.price = price;    // idem pour le dernier prix
+		
+		console.log(`🔍 Recherche de Triple Bottom sur un Timeframe ${timeframe}m activée
+		10 bougies nécessaire pour commencer la détection Triple Bottom ${closes.length}/10)`);
+        if (closes.length >= 10 && config.detectTripleBottom && typeof window.detectTripleBottom === 'function') {
+			statusEl.textContent = `🔍 Détection Triple Bottom activé (${closes.length}/10 bougies dispo, TF: ${window.selectedTimeframe}m)`;
+		
+          
+            tripleBottomResult = window.detectTripleBottom(
+                closes, <!-- utilise les closes des bougies -->
+                tolerance, 
+                price, 
+                lastDoubleBottomIndex
+            );
+
+            if (tripleBottomResult) {
+				statusEl.textContent = `✅ Triple Bottom détecté à ${price.toFixed(4)} (TF: ${window.selectedTimeframe}m)`;
+                console.log("✅ Triple Bottom détecté", tripleBottomResult);
+                lastDetectionTime = Date.now();
+            }
+		} 	else {
+				const missing = 10 - closes.length;
+				statusEl.textContent = `⏳ 10 bougies nécessaire pour commencer la détection (${closes.length}/10)`;
+				}
+      
+      
+      <!-- // ============================================= -->
+      <!-- // 4. EXÉCUTION DU TRADE SI TOUT EST VALIDE      -->
+      <!-- // ============================================= -->
+      // Modification ici - on vérifie si les confirmations sont valides selon les paramètres
+ 
+	  
+	
+<!-- // DETERMINER LE PATTERN UTILSE -->
+let activePattern = null;
+if (comboDetected && price > comboDetected.confirmationLevel) {
+    activePattern = {
+        type: "combo",
+        entry: comboDetected.confirmationLevel,
+        name: "Inverted H&S + Double Bottom"
+        };
+} else if (rectangleResult && price > rectangleResult.confirmationLevel) {
+            activePattern = {
+                type: "rectangle",
+                entry: rectangleResult.confirmationLevel,
+                name: "Bullish Rectangle",
+                bounds: {
+                    upper: rectangleResult.upperBound,
+                    lower: rectangleResult.lowerBound
+                }
+            };
+} else if (tripleBottomResult) {
+    activePattern = {
+        type: "triple",
+        entry: tripleBottomResult.entryPrice,  // entrée au prix détecté
+        name: "Triple Bottom",
+        minValue: tripleBottomResult.minValue,
+        confirmationLevel: tripleBottomResult.confirmationLevel
+    };
+} else if (doubleBottomPrice !== null) {
+    activePattern = {
+        type: "double",
+        entry: doubleBottomPrice,
+        name: "Double Bottom"
+        };
+}
+
+	<!-- //	EXECUTION SI VALIDATION MACD/RSI OK  -->
+    if (activePattern) {
+		const time = new Date().toLocaleTimeString();
+		   
+		console.log("✅ ACTIVE PATTERN trouvé :", activePattern);
+		if (!activePattern.entry || isNaN(activePattern.entry)) {
+        console.error("❌ Entry invalide :", activePattern.entry);
+    }
+		
+		<!-- // AFFCICHER LE SIGNAL SUR LA PAGE WEB AVEC/SANS MACD FFCC00 D4AF37 F1C40F FFD700 -->
+			logDiv.innerHTML += `
+              <div style="margin-top:10px; padding:10px; background:#F1C40F; border-radius:5px;"> 
+                🕓 <strong>${activePattern.name} détecté${config.useMACD ? " + MACD" : ""}${config.useRSI ? " + RSI" : ""}</strong> à <strong>${time}</strong><br>
+                🎯 <strong>Entrée à ${activePattern.entry.toFixed(6)}$</strong>
+				${config.useRSI ? `<br>📊 <strong>RSI: ${rsiValue?.toFixed(2) || 'N/A'}</strong>` : ''}
+			  </div>`;
+			  	
+    
+		<!-- //LOGIQUE POUR LES PATTERNS -->
+		activeTrade = {
+        entryPrice: activePattern.entry,  // Utilisation de activePattern.entry
+        tp: activePattern.entry * (1 + config.tp / 100),
+        sl: activePattern.entry * (1 - config.sl / 100),
+        trailing: activePattern.entry * (1 + (config.tp - config.trailing) / 100),
+        highest: activePattern.entry,
+        pattern: activePattern.type  // "combo", "triple" ou "double"
+		};
+
+		// ▼▼▼ Mise à jour de l'index ▼▼▼
+		lastDoubleBottomIndex = activePattern.type === "triple" && comboDetected?.components?.doubleBottom?.index 
+                          ? comboDetected.components.doubleBottom.index 
+                          : doubleBottomIndex;
+						 				  
+  		
+<!-- // ➕ APPEL AU BACKEND POUR EXECUTER LE TRADE -->
+  fetch("/trade", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    chain: "solana",
+    pair: selectedPair.baseToken.address, // ou dynamic depuis selectedPair.baseToken.address
+    walletId: "mcadntmr5gxofz",     // ton wallet
+    type: "buy",
+    amountOrPercent: config.tradeAmount || 0.00,
+    customFeeAndTip: false,
+    priorityFee: 0.00005,
+    gasFeeDelta: 0,
+    maxFeePerGas: 0,
+    jitoEnabled: false,
+    jitoTip: 0,
+    maxSlippage: 0.02, //en pourcentage
+    concurrentNodes: 2,
+    retries: 1,
+    migrateSellPercent: 0,
+    minDevSellPercent: 0,
+    devSellPercent: 0,
+    stopEarnPercent: null,
+    stopLossPercent: 0.25,
+    stopEarnGroup: null,
+    stopLossGroup: null,
+    trailingStopGroup: null, // suit le prix à la hausse, mais vend si ça retombe d’un certain seuil (ex: -20%).
+    pnlOrderExpireDelta: 86400000,
+    pnlOrderExpireExecute: false,
+    pnlOrderUseMidPrice: false,
+    pnlCustomConfigEnabled: false,
+    pnlCustomConfig: {
+      customFeeAndTip: false,
+      priorityFee: 0.00005,
+      gasFeeDelta: 0,
+      maxFeePerGas: 0,
+      jitoEnabled: false,
+      jitoTip: 0,
+      maxSlippage: 0.025,
+      concurrentNodes: 2,
+      retries: 1
+    }
+  })
+})
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      logDiv.innerHTML += `<div style="color:green;">✅ Trade exécuté avec succès</div>`;
+      console.log("✅ Trade envoyé à l'API DBotX", data.result);
+    } else {
+      logDiv.innerHTML += `<div style="color:red;"><strong>❌ Erreur lors du trade d'achat : ${data.error}</strong></div>`;
+      console.error("❌ Erreur trade DBotX :", data.error);
+    }
+  })
+  .catch(err => {
+    logDiv.innerHTML += `<div style="color:red;">❌ Échec de la requête API DBotX</div>`;
+    console.error("❌ Exception API :", err);
+  });
+
+			
+          }
+        }
+      }
+
+      // Gestion de la position existante (TP/SL)
+      if (activeTrade) {
+        const { entryPrice, tp, sl, trailing, highest } = activeTrade;
+        const time = new Date().toLocaleTimeString();
+
+        if (price <= sl) {
+		 const lossPercentage = ((entryPrice - price) / entryPrice * 100).toFixed(2);
+		 const tradeperdant = 
+		 `🔴 TRADE PERDANT ❌ Stop Loss touché à ${time}\n` +
+		 `💰 Vente à ${price.toFixed(6)} - Perte: ${lossPercentage}%$\n` +
+		 `🔠 Symbole : ${selectedPair.baseToken.symbol}\n` +
+		 `📌 Adresse : ${selectedPair.baseToken.address}%`;
+		 
+		 // Vérifier si l'erreur d'achat existe
+			const hasPurchaseError = document.getElementById('token-info').textContent.includes('Aucun tradeId reçu');
+			
+		 // 1. On affiche toujours le message de Vente
+		  logDiv.innerHTML += `
+		  <div style="margin-top:10px; padding:10px; background:#E74C3C; border-radius:5px;"> 
+		        ❌ <strong>Stop Loss touché à ${price.toFixed(6)}$ (${time})</strong><br>
+				💰 <strong>Perte: ${lossPercentage}%</strong>
+			  </div>
+			  <div style="color:red;">
+			    ❌ <strong>${hasPurchaseError ? 'Trade non exécuté (Trade simulé)' : 'Trade executé'}</strong>
+				</div>`;
+				
+			// Ajout de la pause de 5 minutes (300000 ms)
+			pauseUntil = now + 300000;
+			console.log(`⏸ Mise en pause de la détection pour 5 minutes (jusqu'à ${new Date(pauseUntil).toLocaleTimeString()})`);
+		  
+		  if (!hasPurchaseError) {
+		  			// ➕ Appel à ton backend pour exécuter le trade perdant
+  fetch("/trade", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    chain: "solana",
+    pair: selectedPair.baseToken.address, // ou dynamic depuis selectedPair.baseToken.address
+    walletId: "mcadntmr5gxofz",     // ton wallet
+    type: "sell",
+    amountOrPercent: 1,
+    customFeeAndTip: false,
+    priorityFee: 0.00005,
+    gasFeeDelta: 0,
+    maxFeePerGas: 0,
+    jitoEnabled: false,
+    jitoTip: 0,
+    maxSlippage: 0.05, //en pourcentage
+    concurrentNodes: 2,
+    retries: 1,
+    migrateSellPercent: 0,
+    minDevSellPercent: 0,
+    devSellPercent: 0,
+    stopEarnPercent: null,
+    stopLossPercent: null,
+    stopEarnGroup: null,
+    stopLossGroup: null,
+    trailingStopGroup: null, // suit le prix à la hausse, mais vend si ça retombe d’un certain seuil (ex: -20%).
+    pnlOrderExpireDelta: 86400000,
+    pnlOrderExpireExecute: false,
+    pnlOrderUseMidPrice: false,
+    pnlCustomConfigEnabled: false,
+    pnlCustomConfig: {
+      customFeeAndTip: false,
+      priorityFee: 0.00005,
+      gasFeeDelta: 0,
+      maxFeePerGas: 0,
+      jitoEnabled: false,
+      jitoTip: 0,
+      maxSlippage: 0.02,
+      concurrentNodes: 2,
+      retries: 1
+    }
+  })
+})
+}
+
+                    
+          //addNotification(message);
+          sendTelegramMessage(tradeperdant);
+		  activeTrade = null;
+          stopLossCounter++;
+		  lastTradeTime = Date.now();
+
+          if (stopLossCounter >= config.maxSL) {
+		  // Récupération SÉCURISÉE des infos
+			const symbol = selectedPair?.baseToken?.symbol || "Token inconnu";
+			const address = selectedPair?.baseToken?.address || "Adresse inconnue"
+		    const maxSlMessage = 
+			`⚫ ARRET DETECTION\n` +
+			`🚫 Nombre maximum de Stop Loss atteint (${config.maxSL})\n` +
+			`💰 Vente à ${price.toFixed(6)} - Perte: ${lossPercentage}%$\n` +
+			`🔠 Symbole : ${symbol}\n` +
+			`📌 Adresse : ${address}`;
+			
+			// Vérifier si l'erreur d'achat existe
+			const hasPurchaseError = document.getElementById('token-info').textContent.includes('Aucun tradeId reçu');
+			
+			// 1. On affiche toujours le message de Vente
+		    logDiv.innerHTML += `<p style="color:gray;">🚫 Nombre maximum de Stop Loss atteint (${config.maxSL}). Arrêt de la détection.</p>`;
+            //addNotification(maxSlMessage);
+            sendTelegramMessage(maxSlMessage);
+			
+		if (!hasPurchaseError) {	
+					// ➕ Appel à ton backend pour exécuter le trade
+  fetch("/trade", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    chain: "solana",
+    pair: selectedPair.baseToken.address, // ou dynamic depuis selectedPair.baseToken.address
+    walletId: "mcadntmr5gxofz",     // ton wallet
+    type: "sell",
+    amountOrPercent: 1,
+    customFeeAndTip: false,
+    priorityFee: 0.00005,
+    gasFeeDelta: 0,
+    maxFeePerGas: 0,
+    jitoEnabled: false,
+    jitoTip: 0,
+    maxSlippage: 0.05, //en pourcentage
+    concurrentNodes: 2,
+    retries: 1,
+    migrateSellPercent: 0,
+    minDevSellPercent: 0,
+    devSellPercent: 0,
+    stopEarnPercent: null,
+    stopLossPercent: null,
+    stopEarnGroup: null,
+    stopLossGroup: null,
+    trailingStopGroup: null, // suit le prix à la hausse, mais vend si ça retombe d’un certain seuil (ex: -20%).
+    pnlOrderExpireDelta: 86400000,
+    pnlOrderExpireExecute: false,
+    pnlOrderUseMidPrice: false,
+    pnlCustomConfigEnabled: false,
+    pnlCustomConfig: {
+      customFeeAndTip: false,
+      priorityFee: 0.00005,
+      gasFeeDelta: 0,
+      maxFeePerGas: 0,
+      jitoEnabled: false,
+      jitoTip: 0,
+      maxSlippage: 0.02,
+      concurrentNodes: 2,
+      retries: 1
+    }
+  })
+})
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      logDiv.innerHTML += `<div style="color:green;">✅ Trade exécuté avec succès</div>`;
+      console.log("✅ Trade envoyé à l'API DBotX", data.result);
+    } else {
+      logDiv.innerHTML += `<div style="color:red;">❌ Erreur lors du trade : ${data.error}</div>`;
+      console.error("❌ Erreur trade DBotX :", data.error);
+    }
+  })
+  .catch(err => {
+    logDiv.innerHTML += `<div style="color:red;">❌ Échec de la requête API DBotX</div>`;
+    console.error("❌ Exception API :", err);
+  });
+  
+ }
+			
+          }
+        } else if (price >= tp) {
+          activeTrade.highest = Math.max(highest, price);
+          const trailingStop = highest * (1 - config.trailing / 100);
+
+          if (price < trailingStop) {
+		   const winPercentage = ((price - entryPrice) / entryPrice * 100).toFixed(2);
+		   // Récupération SÉCURISÉE des infos
+			const symbol = selectedPair?.baseToken?.symbol || "Token inconnu";
+			const address = selectedPair?.baseToken?.address || "Adresse inconnue"
+			
+			// Vérifier si l'erreur d'achat existe
+			const hasPurchaseError = document.getElementById('token-info').textContent.includes('Aucun tradeId reçu');
+			
+			// 1. On affiche toujours le message de trailing
+		   logDiv.innerHTML += `
+		   <div style="margin-top:10px; padding:10px; background:#1E8449; border-radius:5px;"> 
+                🔄 <strong>${hasPurchaseError ? 'Trailing Stop simulé' : 'Trailing Stop activé'} à ${price.toFixed(6)}$ (${time})</strong><br>
+				💰 <strong>${hasPurchaseError ? 'Gain simulé' : 'Gain'}: ${winPercentage}%</strong>
+			  </div>
+			  <div style="color:red;">
+			    <strong>${hasPurchaseError ? '❌ Trade non exécuté (Trade simulé)' : ''}</strong>
+				</div>`;
+					   
+		    // Ajout de la pause de 5 minutes (300000 ms)
+			pauseUntil = now + 300000;
+			console.log(`⏸ Mise en pause de la détection pour 5 minutes (jusqu'à ${new Date(pauseUntil).toLocaleTimeString()})`);
+			
+			
+            const tradegagnant = 
+			`🟢 TRADE GAGNANT\n` +
+			`🔄 Trailing Stop activé à ${time}\n` +
+			`💰 Vente à ${price.toFixed(6)}$ - Gain : ${winPercentage}\n` +
+			`🔠 Symbole : ${symbol}\n` +
+			`📌 Adresse : ${address}`;
+			
+            //addNotification(message);
+            sendTelegramMessage(tradegagnant);
+            activeTrade = null;
+			lastTradeTime = Date.now();
+			
+			if (!hasPurchaseError) {
+			// ➕ Appel à ton backend pour exécuter le trade
+  fetch("/trade", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    chain: "solana",
+    pair: selectedPair.baseToken.address, // ou dynamic depuis selectedPair.baseToken.address
+    walletId: "mcadntmr5gxofz",     // ton wallet
+    type: "sell",
+    amountOrPercent: 1,
+    customFeeAndTip: false,
+    priorityFee: 0.00005,
+    gasFeeDelta: 0,
+    maxFeePerGas: 0,
+    jitoEnabled: false,
+    jitoTip: 0,
+    maxSlippage: 0.05, //en pourcentage
+    concurrentNodes: 2,
+    retries: 1,
+    migrateSellPercent: 0,
+    minDevSellPercent: 0,
+    devSellPercent: 0,
+    stopEarnPercent: null,
+    stopLossPercent: null,
+    stopEarnGroup: null,
+    stopLossGroup: null,
+    trailingStopGroup: null, // suit le prix à la hausse, mais vend si ça retombe d’un certain seuil (ex: -20%).
+    pnlOrderExpireDelta: 86400000,
+    pnlOrderExpireExecute: false,
+    pnlOrderUseMidPrice: false,
+    pnlCustomConfigEnabled: false,
+    pnlCustomConfig: {
+      customFeeAndTip: false,
+      priorityFee: 0.00005,
+      gasFeeDelta: 0,
+      maxFeePerGas: 0,
+      jitoEnabled: false,
+      jitoTip: 0,
+      maxSlippage: 0.02,
+      concurrentNodes: 2,
+      retries: 1
+    }
+  })
+})
+  .then(res => res.json())
+  .then(data => {
+    if (data.success) {
+      logDiv.innerHTML += `<div style="color:green;">✅ Trade exécuté avec succès</div>`;
+      console.log("✅ Trade envoyé à l'API DBotX", data.result);
+    } else {
+      logDiv.innerHTML += `<div style="color:red;">❌ Erreur lors du trade : ${data.error}</div>`;
+      console.error("❌ Erreur trade DBotX :", data.error);
+    }
+  })
+  .catch(err => {
+    logDiv.innerHTML += `<div style="color:red;">❌ Échec de la requête API DBotX</div>`;
+    console.error("❌ Exception API :", err);
+  });
+  }
+  
+          }
+        }
+      }
+    
+	
+	
+	//Bouton Simulation Achat
+	  document.getElementById("simulate-detection").addEventListener("click", () => {
+  
+  // 0. Déclarer 'now' au début de la fonction
+    const now = Date.now();
+   
+  // 1. Réinitialisation COMPLÈTE en douceur
+    lastDetectionTime = 0;
+    stopLossCounter = 0;
+    lastDoubleBottomIndex = -1;
+    pauseUntil = 0;
+    activeTrade = null;
+
+    // 2. Séquence MAGIQUE pour votre algorithme existant
+    const basePrice = 0.000230;
+    const magicSequence = [
+        // Structure parfaite pour votre détection :
+        basePrice * 1.10,  // [0] Haut initial
+        basePrice * 1.05,  // [1] p0 (avant p1)
+        basePrice * 0.92,  // [2] p1 - Premier creux
+        basePrice * 0.90,  // [3] p2 - Point le PLUS BAS
+        basePrice * 0.93,  // [4] p3 - Second creux
+        basePrice * 0.95,  // [5] p4 (après p2)
+        basePrice * 1.08   // [6] Prix actuel (breakout)
+    ];
+
+    // 3. Injection en douceur
+    priceHistory = [...magicSequence];
+    const currentPrice = magicSequence[6];
+    document.getElementById("price").textContent = currentPrice.toFixed(6);
+
+    // 4. Vérification visuelle (sans console.log)
+    const visualDebug = `
+        <div style="margin:10px;padding:10px;background:#113311;border-radius:5px;">
+            <strong>✅ Séquence optimisée prête</strong>
+            <div style="display:flex; margin-top:8px;">
+                <div style="flex:1;">
+                    <div>Creux 1: ${magicSequence[2].toFixed(6)}</div>
+                    <div>Point bas: ${magicSequence[3].toFixed(6)}</div>
+                    <div>Creux 2: ${magicSequence[4].toFixed(6)}</div>
+                </div>
+                <div style="flex:1;">
+                    <div>Structure: Valide</div>
+                    <div>Breakout: ${currentPrice.toFixed(6)}</div>
+                    <div>Détection: Prête</div>
+                </div>
+            </div>
+        </div>`;
+    document.getElementById("token-info").innerHTML += visualDebug;
+
+    // 5. Déclenchement en douceur après court délai
+    setTimeout(() => {
+        simulateTrading(currentPrice);
+        
+        // Vérification visuelle du résultat
+        setTimeout(() => {
+            if (activeTrade) {
+                document.getElementById("token-info").innerHTML += `
+                    <div style="color:green;margin-top:5px;">
+                        🎉 Détection réussie à ${currentPrice.toFixed(6)}
+                    </div>`;
+            } else {
+                document.getElementById("token-info").innerHTML += `
+                    <div style="color:gold;margin-top:5px;">
+                        ⚠️ Vérifiez les paramètres de détection
+                    </div>`;
+            }
+        }, 300);
+    }, 100);
+});
+
+//Bouton Simulation Trailing
+document.getElementById("simulate-trailing").addEventListener("click", () => {
+    if (!activeTrade) {
+        alert("Aucun trade actif. Veuillez d'abord détecter un signal d'achat.");
+        return;
+    }
+
+    // Logique pour forcer le déclenchement du trailing stop existant
+    const currentPrice = parseFloat(document.getElementById("price").textContent);
+    const trailingStopLevel = activeTrade.highest * (1 - config.trailing / 100);
+    
+    // Modifie le dernier prix pour déclencher le trailing
+    const triggerPrice = trailingStopLevel * 0.99; // Juste en dessous du seuil
+    
+    // Affiche les informations de debug
+    console.log("[Trailing Stop Test] Activation forcée", {
+        currentHighest: activeTrade.highest,
+        trailingStopLevel: trailingStopLevel,
+        triggerPrice: triggerPrice
+    });
+
+    // Ajoute un message dans l'interface
+    const logDiv = document.getElementById("token-info");
+    logDiv.innerHTML += `
+        <div class="notification" style="background-color: #333300;">
+            🧪 TEST TRAILING STOP: 
+            Plus haut = ${activeTrade.highest.toFixed(6)}, 
+            Seuil = ${trailingStopLevel.toFixed(6)}, 
+            Prix simulé = ${triggerPrice.toFixed(6)}
+        </div>`;
+
+    // Appelle la fonction existante avec le prix qui déclenche le trailing
+    simulateTrading(triggerPrice);
+});
+
+
+//Simulation Triple Bottom
+ document.getElementById("simulate-triple-bottom").addEventListener("click", () => {
+    // Crée des bougies fictives si besoin pour avoir au moins 10 closes
+    while (!window.ohlcSeries || window.ohlcSeries.length < 10) {
+        const lastClose = window.ohlcSeries?.length 
+            ? window.ohlcSeries[window.ohlcSeries.length - 1].close 
+            : 1.0;
+        const newClose = lastClose * (1 + (Math.random() - 0.5) * 0.01);
+        window.ohlcSeries = window.ohlcSeries || [];
+        window.ohlcSeries.push({ open: newClose, high: newClose, low: newClose, close: newClose, timeSlot: window.ohlcSeries.length, timestamp: Date.now() });
+    }
+
+    // Mettre à jour closes et price
+    window.closes = window.ohlcSeries.map(c => c.close);
+    window.price = window.closes[window.closes.length - 1];
+
+    // Injecter le Triple Bottom directement
+    window.tripleBottomResult = {
+        pattern: "Triple Bottom",
+        entryPrice: window.price,
+        minValue: Math.min(...window.closes.slice(-3)),
+        confirmationLevel: window.price,
+        index: window.closes.length - 1,
+        indices: [window.closes.length - 3, window.closes.length - 2, window.closes.length - 1]
+    };
+
+    console.log("✅ Triple Bottom simulé injecté :", window.tripleBottomResult);
+
+    // Appel de la logique réelle
+    if (typeof window.simulateTrading === "function") {
+        window.simulateTrading();  // déclenche exactement le même mécanisme que la détection réelle
+    } else {
+        console.error("⚠️ simulateTrading() non disponible !");
+    }
+});
+  </script>
+  </body>
+</html>
+
