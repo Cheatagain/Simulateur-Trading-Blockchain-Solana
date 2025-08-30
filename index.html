@@ -677,7 +677,149 @@ let lastDoubleBottomIndex = -1;
 let pauseUntil = 0; // Timestamp jusqu'à quand la détection est en pause
 
 
+function addLogMessage(html) {
+  const logDiv = document.getElementById("log");
+  if (!logDiv) {
+    console.error("❌ logDiv introuvable !");
+    return;
+  }
+  logDiv.innerHTML += html;
+}
+
+// Fonction détéction figures
+function handlePattern(pattern, config) {
+  if (!pattern || !pattern.entry) {
+    console.warn("⚠️ Pattern invalide", pattern);
+    return;
+  }
+
+  console.log("✅ Pattern détecté :", pattern.name, pattern);
+
+  // Appel de la fonction pour creer le trade
+  createActiveTrade(pattern, config);
+}
+
+
+// Fonction création du trade
+function createActiveTrade(pattern, config) {
+  if (!pattern.entry) {
+    console.error("❌ Entry invalide :", pattern.entry);
+    return null;
+  }
+
+  const activeTrade = {
+    entryPrice: pattern.entry,
+    tp: pattern.entry * (1 + config.tp / 100),
+    sl: pattern.entry * (1 - config.sl / 100),
+    trailing: pattern.entry * (1 + (config.tp - config.trailing) / 100),
+    highest: pattern.entry,
+    pattern: pattern.type
+  };
+
+  window.activeTrade = activeTrade;
+
+  addLogMessage(`
+    <div style="margin-top:10px; padding:10px; background:#F1C40F; border-radius:5px;"> 
+      🕓 <strong>${pattern.name} détecté${config.useMACD ? " + MACD" : ""}${config.useRSI ? " + RSI" : ""}</strong> à <strong>${new Date().toLocaleTimeString()}</strong><br>
+      🎯 <strong>Entrée à ${pattern.entry.toFixed(6)}$</strong>
+      ${config.useRSI ? `<br>📊 <strong>RSI: ${rsiValue?.toFixed(2) || 'N/A'}</strong>` : ''}
+    </div>
+  `);
+  
+  console.log("💰 ACTIVE TRADE créé :", activeTrade);
+  return activeTrade;
+}
+
+function triggerStopLoss(activeTrade, lastPrice) {
+ console.log("▶️ Entrée triggerStopLoss", { activeTrade, lastPrice });
+  if (!activeTrade) return;
+
+  const time = new Date().toLocaleTimeString();
+  const lossPercentage = ((activeTrade.entryPrice - lastPrice) / activeTrade.entryPrice * 100).toFixed(2);
+  const hasPurchaseError = document.getElementById('token-info').textContent.includes('Aucun tradeId reçu');
+
+  addLogMessage(`
+    <div style="margin-top:10px; padding:10px; background:#E74C3C; border-radius:5px;"> 
+      ❌ <strong>Stop Loss touché à ${lastPrice.toFixed(6)}$ (${time})</strong><br>
+      💰 <strong>Perte: ${lossPercentage}%</strong>
+    </div>
+    <div style="color:red;">
+      ❌ <strong>${hasPurchaseError ? 'Trade non exécuté (Trade simulé)' : 'Trade exécuté'}</strong>
+    </div>
+  `);
+
+  window.activeTrade = null;
+  console.log("🔥 STOP LOSS déclenché !", { lastPrice, sl: activeTrade.sl, entryPrice: activeTrade.entryPrice });
+  
+  return hasPurchaseError;
+}
+
+function triggerTakeProfit(activeTrade, price, config) {
+  if (!activeTrade) return;
+
+  const time = new Date().toLocaleTimeString();
+  activeTrade.highest = Math.max(activeTrade.highest, price);
+  const trailingStop = activeTrade.highest * (1 - config.trailing / 100);
+
+  if (price < trailingStop) {
+    const winPercentage = ((price - activeTrade.entryPrice) / activeTrade.entryPrice * 100).toFixed(2);
+    const hasPurchaseError = document.getElementById('token-info').textContent.includes('Aucun tradeId reçu');
+
+    addLogMessage(`
+      <div style="margin-top:10px; padding:10px; background:#1E8449; border-radius:5px;"> 
+        🔄 <strong>${hasPurchaseError ? 'Trailing Stop simulé' : 'Trailing Stop activé'} à ${price.toFixed(6)}$ (${time})</strong><br>
+        💰 <strong>${hasPurchaseError ? 'Gain simulé' : 'Gain'}: ${winPercentage}%</strong>
+      </div>
+      <div style="color:red;">
+        <strong>${hasPurchaseError ? '❌ Trade non exécuté (Trade simulé)' : ''}</strong>
+      </div>
+    `);
+
+    window.activeTrade = null;
+    console.log("🟢 TAKE PROFIT/TRAILING STOP déclenché !", { price, entryPrice: activeTrade.entryPrice });
+
+    return hasPurchaseError;
+  }
+  return false;
+}
+
+function checkActiveTrade(price, config) {
+  if (!window.activeTrade) return;
+
+  const trade = window.activeTrade;
+
+  if (price <= trade.sl) {
+    const hasPurchaseError = triggerStopLoss(trade, price);
+    if (!hasPurchaseError) {
+      // ici tu peux appeler ton backend pour vendre
+    }
+  } else if (price >= trade.tp || price < trade.highest * (1 - config.trailing / 100)) {
+    const hasPurchaseError = triggerTakeProfit(trade, price, config);
+    if (!hasPurchaseError) {
+      // ici tu peux appeler ton backend pour vendre
+    }
+  }
+}
+
+
+
+
+if (window.activeTrade) {
+    console.log("DEBUG avant simulateTrading(), activeTrade =", window.activeTrade);
+    simulateTrading();
+} else {
+    console.warn("⚠️ simulateTrading non appelé, activeTrade est null !");
+}
+
+
+
+
 function simulateTrading(price) {
+
+console.log("DEBUG entrée simulateTrading()", {
+    activeTrade: typeof activeTrade !== "undefined" ? activeTrade : "indéfini",
+    windowActiveTrade: window.activeTrade
+});
 
 if (typeof detectTripleBottom !== 'function') {
   console.error('Fonction detectTripleBottom non disponible');
@@ -1026,7 +1168,7 @@ if (config.detectDoubleBottom) {
       <!-- // ============================================= -->
       <!-- // 4. EXÉCUTION DU TRADE SI TOUT EST VALIDE      -->
       <!-- // ============================================= -->
-      // Modification ici - on vérifie si les confirmations sont valides selon les paramètres
+ 
  
 	  
 	
@@ -1067,39 +1209,18 @@ if (comboDetected && price > comboDetected.confirmationLevel) {
         };
 }
 
-	<!-- //	EXECUTION SI VALIDATION MACD/RSI OK  -->
+	<!-- //	EXECUTION  -->
     if (activePattern) {
-		const time = new Date().toLocaleTimeString();
-		   
-		console.log("✅ ACTIVE PATTERN trouvé :", activePattern);
-		if (!activePattern.entry || isNaN(activePattern.entry)) {
-        console.error("❌ Entry invalide :", activePattern.entry);
-    }
+	// Créer le trade
+    createActiveTrade(activePattern, config);
+	
+	// Appeler simulateTrading maintenant que activeTrade existe
+    simulateTrading();
+	}
 		
-		<!-- // AFFCICHER LE SIGNAL SUR LA PAGE WEB AVEC/SANS MACD FFCC00 D4AF37 F1C40F FFD700 -->
-			logDiv.innerHTML += `
-              <div style="margin-top:10px; padding:10px; background:#F1C40F; border-radius:5px;"> 
-                🕓 <strong>${activePattern.name} détecté${config.useMACD ? " + MACD" : ""}${config.useRSI ? " + RSI" : ""}</strong> à <strong>${time}</strong><br>
-                🎯 <strong>Entrée à ${activePattern.entry.toFixed(6)}$</strong>
-				${config.useRSI ? `<br>📊 <strong>RSI: ${rsiValue?.toFixed(2) || 'N/A'}</strong>` : ''}
-			  </div>`;
-			  	
-    
-		<!-- //GESTION TAKE PROFIT, STOP LOSS, TRAILING -->
-		activeTrade = {
-        entryPrice: activePattern.entry,  // Utilisation de activePattern.entry
-        tp: activePattern.entry * (1 + config.tp / 100),
-        sl: activePattern.entry * (1 - config.sl / 100),
-        trailing: activePattern.entry * (1 + (config.tp - config.trailing) / 100),
-        highest: activePattern.entry,
-        pattern: activePattern.type  // "combo", "triple" ou "double"
-		};
-
-		// Variable accessible globalement
-		window.activeTrade = activeTrade;
-		console.log("💰 ACTIVE TRADE créé :", window.activeTrade);
 
 		// ▼▼▼ Mise à jour de l'index ▼▼▼
+		console.log("DEBUG simulateTrading - activeTrade :", activeTrade);
 		lastDoubleBottomIndex = activePattern.type === "triple" && comboDetected?.components?.doubleBottom?.index 
                           ? comboDetected.components.doubleBottom.index 
                           : doubleBottomIndex;
@@ -1167,7 +1288,7 @@ if (comboDetected && price > comboDetected.confirmationLevel) {
 			
           }
         }
-      }
+      
 
       // Gestion de la position existante (TP/SL)
       if (activeTrade) {
@@ -1176,7 +1297,14 @@ if (comboDetected && price > comboDetected.confirmationLevel) {
         const { entryPrice, tp, sl, trailing, highest } = activeTrade;
         const time = new Date().toLocaleTimeString();
 
-		console.log("📊 Check Stop Loss", { lastPrice, sl, entryPrice });
+		// Debug avant le check
+		console.log("DEBUG check TP/SL :", {
+        windowPrice: window.price,
+        lastPrice: lastPrice,
+        sl: activeTrade.sl,
+        activeTrade: activeTrade
+		});
+		
         if (lastPrice <= sl) {
 		 const lossPercentage = ((entryPrice - lastPrice) / entryPrice * 100).toFixed(2);
 		 const tradeperdant = 
@@ -1445,6 +1573,8 @@ if (comboDetected && price > comboDetected.confirmationLevel) {
   
           }
         }
+		console.log("DEBUG sortie simulateTrading()");
+
       }
     
 	
@@ -1583,51 +1713,41 @@ document.getElementById("simulate-triple-bottom").addEventListener("click", () =
     };
     console.log("✅ Triple Bottom simulé :", window.tripleBottomResult);
 
-    // Créer directement activeTrade pour déclencher le signal
-    window.activeTrade = {
-        entryPrice: window.tripleBottomResult.entryPrice,
-        tp: window.tripleBottomResult.entryPrice * 1.05,  // exemple TP 5%
-        sl: window.tripleBottomResult.entryPrice * 0.975, // exemple SL 2.5%
-        trailing: window.tripleBottomResult.entryPrice * 1.03,
-        highest: window.tripleBottomResult.entryPrice,
-        pattern: "triple"
+    // Créer l’activeTrade via la fonction
+    const pattern = {
+    type: "triple",
+    entry: window.tripleBottomResult.entryPrice,
+    name: "Triple Bottom",
+    minValue: window.tripleBottomResult.minValue
     };
+
+    // Utiliser ta fonction 2 pour créer le trade
+    createActiveTrade(pattern, config);
 
     console.log("💰 ACTIVE TRADE créé :", window.activeTrade);
 
-    // Déclencher l'affichage du signal immédiatement
-    if (typeof window.simulateTrading === "function") {
-        window.simulateTrading();
+   // Optionnel : déclencher le check TP/SL immédiatement
+    if (typeof simulateTrading === "function") {
+        simulateTrading();  // vérifie TP/SL/Trailing sur ce prix simulé
     }
 });
 
 
 //Simuler un Stop Loss
 document.getElementById("simulate-stoploss").addEventListener("click", () => {
-    if (!window.activeTrade) {
-        console.warn("⚠️ Aucun trade actif → impossible de simuler un stop loss.");
-        return;
+    // Vérifier qu'un trade est actif
+    console.log("DEBUG activeTrade avant test SL :", window.activeTrade);
+
+    if (window.activeTrade) {
+        // Forcer le prix en dessous du SL
+        window.price = window.activeTrade.sl * 0.99;
+        console.log("🔻 DEBUG Simulation Stop Loss : prix forcé à", window.price);
+
+        // Appel de la fonction qui gère TP/SL
+        triggerStopLoss(window.activeTrade, window.price);
+    } else {
+        console.log("⚠️ Aucun trade actif pour simuler un Stop Loss");
     }
-
-    // Forcer un prix sous le stop loss
-    window.price = window.activeTrade.sl * 0.95;
-    console.log("🔻 Simulation Stop Loss : prix forcé à", window.price);
-
-    // On "ré-injecte" ce prix dans le code TP/SL déjà existant
-    // en appelant le même bloc que pour la détection normale
-    (function() {
-        const closes = window.closes || [];
-        const lastPrice = window.price || closes[closes.length - 1];
-        if (!window.activeTrade) return;
-
-        const { entryPrice, sl } = window.activeTrade;
-
-        if (lastPrice <= sl) {
-            console.log("🔥 STOP LOSS déclenché !", { lastPrice, sl, entryPrice });
-            // Tout ton code actuel de log + fetch pour vendre
-            // tu peux copier-coller exactement ce qui est dans ton bloc TP/SL
-        }
-    })();
 });
 
 
