@@ -90,6 +90,7 @@
 
   <div id="search-container">
     <h2>Recherche de Token</h2>
+	CB9dDufT3ZuQXqqSfa1c5kY935TEreyBw9XJXxHKpump
     <input type="text" id="search" placeholder="🔍 Nom, symbole ou adresse..." autocomplete="off" />
     
     <div id="results"></div>
@@ -133,7 +134,7 @@
   <div style="margin-top: 20px;">
     <button onclick="updateConfig()">Mettre à jour</button>
     <button id="simulate-detection" style="padding: 10px; margin: 10px; background-color: #444; color: white; border: none; border-radius: 5px;">🚀 Simuler un Double Bottom</button>
-	<button id="simulate-triple-bottom" style="padding: 10px; margin: 10px; background-color: #444; color: white; border: none; border-radius: 5px;">🔺 Simuler un Triple Bottom</button>
+	<button id="simulate-test-signal" style="padding: 10px; margin: 10px; background-color: #444; color: white; border: none; border-radius: 5px;">🔺 Simuler un Signal</button>
     <button id="simulate-trailing" style="padding: 10px; margin: 10px; background-color: #444; color: white; border: none; border-radius: 5px;">🎯 Simuler un Trailing Stop</button>
 	<button id="simulate-stoploss" style="padding: 10px; margin: 10px; background-color: #444; color: white; border: none; border-radius: 5px;">🎯 Simuler un Stop Loss</button>
   </div>
@@ -465,6 +466,7 @@ async function getTokenDecimals(mint) {
       resultsDiv.style.display = "none";
       searchInput.value = `${pair.baseToken.symbol} - ${pair.baseToken.name}`;
       selectedPair = pair;
+	  console.log("DEBUG displayTokenInfo - selectedPair :", selectedPair)
       const price = parseFloat(pair.priceUsd || 0);
 	  const timeframeSelect = document.getElementById("timeframe-select"); // <-- ajout
 	  const timeframe = timeframeSelect.value;
@@ -678,13 +680,20 @@ let pauseUntil = 0; // Timestamp jusqu'à quand la détection est en pause
 
 
 function addLogMessage(html) {
-  const logDiv = document.getElementById("log");
-  if (!logDiv) {
-    console.error("❌ logDiv introuvable !");
-    return;
-  }
-  logDiv.innerHTML += html;
+    // Utiliser l'id ou la class correcte de ton conteneur
+    const container = document.querySelector("#token-info"); // ou ".token-info-wrapper"
+    if (!container) {
+        console.error("❌ Conteneur pour les messages introuvable !");
+        return;
+    }
+
+     // Si tu veux l’ajouter à la fin, utiliser container.insertAdjacentHTML('beforeend', html);
+    container.insertAdjacentHTML('beforeend', html);
+
+	// Injecter le message en haut si tu veux qu'il apparaisse avant les anciens messages
+	// container.insertAdjacentHTML('afterbegin', html);
 }
+
 
 // Fonction détéction figures
 function handlePattern(pattern, config) {
@@ -702,10 +711,11 @@ function handlePattern(pattern, config) {
 
 // Fonction création du trade
 function createActiveTrade(pattern, config) {
-  if (!pattern.entry) {
-    console.error("❌ Entry invalide :", pattern.entry);
-    return null;
-  }
+ console.log("🔍 [DEBUG] createActiveTrade appelé avec :", pattern, config);
+  if (!pattern || !pattern.entry) {
+        console.error("❌ Pattern invalide :", pattern);
+        return null;
+    }
 
   const activeTrade = {
     entryPrice: pattern.entry,
@@ -720,15 +730,96 @@ function createActiveTrade(pattern, config) {
 
   addLogMessage(`
     <div style="margin-top:10px; padding:10px; background:#F1C40F; border-radius:5px;"> 
-      🕓 <strong>${pattern.name} détecté${config.useMACD ? " + MACD" : ""}${config.useRSI ? " + RSI" : ""}</strong> à <strong>${new Date().toLocaleTimeString()}</strong><br>
+      🕓 <strong>${pattern.name} détecté</strong> à <strong>${new Date().toLocaleTimeString()}</strong><br>
       🎯 <strong>Entrée à ${pattern.entry.toFixed(6)}$</strong>
-      ${config.useRSI ? `<br>📊 <strong>RSI: ${rsiValue?.toFixed(2) || 'N/A'}</strong>` : ''}
     </div>
   `);
   
   console.log("💰 ACTIVE TRADE créé :", activeTrade);
   return activeTrade;
 }
+
+
+let isSendingTrade = false;
+
+function executeBuyTrade(pattern, config, selectedPair) {
+if (isSendingTrade) {
+    console.log("⚠️ Trade déjà en cours, on attend la réponse...");
+    return;
+  }
+	console.log("DEBUG executeBuyTrade - selectedPair :", selectedPair);
+    if (!selectedPair || !selectedPair.baseToken || !selectedPair.baseToken.address) {
+    console.error("❌ selectedPair est invalide ou non défini :", selectedPair);
+    addLogMessage(`<div style="color:red;">❌ Trade annulé : token pair introuvable</div>`);
+    return;
+  }
+
+  isSendingTrade = true;
+
+    fetch("/trade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            chain: "solana",
+            pair: selectedPair.baseToken.address,
+            walletId: "mcadntmr5gxofz",
+            type: "buy",
+            amountOrPercent: config.tradeAmount || 0,
+            customFeeAndTip: false,
+            priorityFee: 0.00005,
+            gasFeeDelta: 0,
+            maxFeePerGas: 0,
+            jitoEnabled: false,
+            jitoTip: 0,
+            maxSlippage: 0.02,
+            concurrentNodes: 2,
+            retries: 1,
+            stopLossPercent: 0.25,
+            pnlOrderExpireDelta: 86400000,
+            pnlOrderExpireExecute: false,
+            pnlCustomConfigEnabled: false,
+            pnlCustomConfig: {
+                customFeeAndTip: false,
+                priorityFee: 0.00005,
+                gasFeeDelta: 0,
+                maxFeePerGas: 0,
+                jitoEnabled: false,
+                jitoTip: 0,
+                maxSlippage: 0.025,
+                concurrentNodes: 2,
+                retries: 1
+            }
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+   addLogMessage(`
+            <div style="margin-top:10px; padding:10px; background:#2ECC71; border-radius:5px; color:white;">
+                ✅ <strong>Trade exécuté avec succès</strong><br>
+                🔗 ID: ${data.result?.tradeId || "inconnu"}<br>
+                🕓 ${new Date().toLocaleTimeString()}
+            </div>
+        `);
+        console.log("✅ Trade envoyé à l'API DBotX", data.result);
+    } else {
+        addLogMessage(`
+            <div style="color:red;">❌ <strong>Erreur lors du trade d'achat</strong> ❌ <strong>${data.error || "Erreur inconnue"}</strong><br></div>
+        `);
+        console.error("❌ Erreur trade DBotX :", data.error);
+    }
+})
+.catch(err => {
+    addLogMessage(`
+        <div style="color:red;">⚠️ <strong>Échec de la requête API DBotX</strong> ️⚠️ <strong>${err.message || err}</strong><br></div>
+    `);
+    console.error("❌ Exception API :", err);
+	})
+.finally(() => {
+      isSendingTrade = false; // relâcher le verrou
+    });	
+}
+
 
 function triggerStopLoss(activeTrade, lastPrice) {
  console.log("▶️ Entrée triggerStopLoss", { activeTrade, lastPrice });
@@ -802,24 +893,15 @@ function checkActiveTrade(price, config) {
 }
 
 
-
-
-if (window.activeTrade) {
-    console.log("DEBUG avant simulateTrading(), activeTrade =", window.activeTrade);
-    simulateTrading();
-} else {
-    console.warn("⚠️ simulateTrading non appelé, activeTrade est null !");
-}
-
-
-
-
 function simulateTrading(price) {
 
-console.log("DEBUG entrée simulateTrading()", {
-    activeTrade: typeof activeTrade !== "undefined" ? activeTrade : "indéfini",
-    windowActiveTrade: window.activeTrade
-});
+const activeTradeToUse = activeTrade || window.activeTrade;
+    if (!activeTradeToUse) {
+        console.warn("⚠️ simulateTrading non appelé, activeTrade est null !");
+        return;
+    }
+
+    console.log("DEBUG simulateTrading - activeTrade :", activeTradeToUse);
 
 if (typeof detectTripleBottom !== 'function') {
   console.error('Fonction detectTripleBottom non disponible');
@@ -1211,81 +1293,30 @@ if (comboDetected && price > comboDetected.confirmationLevel) {
 
 	<!-- //	EXECUTION  -->
     if (activePattern) {
-	// Créer le trade
-    createActiveTrade(activePattern, config);
-	
-	// Appeler simulateTrading maintenant que activeTrade existe
-    simulateTrading();
+		createActiveTrade(activePattern, config); // Créer le trade
+	 
+		if (window.activeTrade) {
+        console.log("DEBUG simulateTrading - activeTrade :", window.activeTrade);
+        simulateTrading();
+		} else {
+        console.log("⚠️ simulateTrading non appelé, activeTrade est null !");
+		}
 	}
 		
 
-		// ▼▼▼ Mise à jour de l'index ▼▼▼
-		console.log("DEBUG simulateTrading - activeTrade :", activeTrade);
-		lastDoubleBottomIndex = activePattern.type === "triple" && comboDetected?.components?.doubleBottom?.index 
-                          ? comboDetected.components.doubleBottom.index 
-                          : doubleBottomIndex;
+	<!-- // MISE A JOUR DE L'INDEX -->
+	console.log("DEBUG simulateTrading - activeTrade :", activeTrade);
+	if (activePattern && activePattern.type === "triple") {
+		lastDoubleBottomIndex = comboDetected?.components?.doubleBottom?.index || doubleBottomIndex;
+	} 	else {
+			lastDoubleBottomIndex = doubleBottomIndex;
+		}
 						 				  
-  		
-<!-- // ➕ APPEL AU BACKEND POUR EXECUTER LE TRADE -->
-  fetch("/trade", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    chain: "solana",
-    pair: selectedPair.baseToken.address, // ou dynamic depuis selectedPair.baseToken.address
-    walletId: "mcadntmr5gxofz",     // ton wallet
-    type: "buy",
-    amountOrPercent: config.tradeAmount || 0.00,
-    customFeeAndTip: false,
-    priorityFee: 0.00005,
-    gasFeeDelta: 0,
-    maxFeePerGas: 0,
-    jitoEnabled: false,
-    jitoTip: 0,
-    maxSlippage: 0.02, //en pourcentage
-    concurrentNodes: 2,
-    retries: 1,
-    migrateSellPercent: 0,
-    minDevSellPercent: 0,
-    devSellPercent: 0,
-    stopEarnPercent: null,
-    stopLossPercent: 0.25,
-    stopEarnGroup: null,
-    stopLossGroup: null,
-    trailingStopGroup: null, // suit le prix à la hausse, mais vend si ça retombe d’un certain seuil (ex: -20%).
-    pnlOrderExpireDelta: 86400000,
-    pnlOrderExpireExecute: false,
-    pnlOrderUseMidPrice: false,
-    pnlCustomConfigEnabled: false,
-    pnlCustomConfig: {
-      customFeeAndTip: false,
-      priorityFee: 0.00005,
-      gasFeeDelta: 0,
-      maxFeePerGas: 0,
-      jitoEnabled: false,
-      jitoTip: 0,
-      maxSlippage: 0.025,
-      concurrentNodes: 2,
-      retries: 1
-    }
-  })
-})
-  .then(res => res.json())
-  .then(data => {
-    if (data.success) {
-      logDiv.innerHTML += `<div style="color:green;">✅ Trade exécuté avec succès</div>`;
-      console.log("✅ Trade envoyé à l'API DBotX", data.result);
-    } else {
-      logDiv.innerHTML += `<div style="color:red;"><strong>❌ Erreur lors du trade d'achat : ${data.error}</strong></div>`;
-      console.error("❌ Erreur trade DBotX :", data.error);
-    }
-  })
-  .catch(err => {
-    logDiv.innerHTML += `<div style="color:red;">❌ Échec de la requête API DBotX</div>`;
-    console.error("❌ Exception API :", err);
-  });
 
-			
+	<!-- // ▼▼▼ EXÉCUTION DU TRADE ▼▼▼ -->
+	if (window.activeTrade) {
+		executeBuyTrade(window.activeTrade, selectedPair, config);
+	}		
           }
         }
       
@@ -1458,7 +1489,7 @@ if (comboDetected && price > comboDetected.confirmationLevel) {
       logDiv.innerHTML += `<div style="color:green;">✅ Trade exécuté avec succès</div>`;
       console.log("✅ Trade envoyé à l'API DBotX", data.result);
     } else {
-      logDiv.innerHTML += `<div style="color:red;">❌ Erreur lors du trade : ${data.error}</div>`;
+      logDiv.innerHTML += `<div style="color:red;">❌ Erreur lors du trade de vente: ${data.error}</div>`;
       console.error("❌ Erreur trade DBotX :", data.error);
     }
   })
@@ -1686,51 +1717,31 @@ document.getElementById("simulate-trailing").addEventListener("click", () => {
 });
 
 
- // Simulation Triple Bottom
-document.getElementById("simulate-triple-bottom").addEventListener("click", () => {
-    // Crée des bougies fictives si besoin pour avoir au moins 10 closes
-    window.ohlcSeries = window.ohlcSeries || [];
-    while (window.ohlcSeries.length < 10) {
-        const lastClose = window.ohlcSeries.length 
-            ? window.ohlcSeries[window.ohlcSeries.length - 1].close 
-            : 1.0;
-        const newClose = lastClose * (1 + (Math.random() - 0.5) * 0.01);
-        window.ohlcSeries.push({ open: newClose, high: newClose, low: newClose, close: newClose, timeSlot: window.ohlcSeries.length, timestamp: Date.now() });
-    }
-
-    // Mettre à jour closes et price
-    window.closes = window.ohlcSeries.map(c => c.close);
-    window.price = window.closes[window.closes.length - 1];
-
-    // Injecter le Triple Bottom
-    window.tripleBottomResult = {
-        pattern: "Triple Bottom",
-        entryPrice: window.price,
-        minValue: Math.min(...window.closes.slice(-3)),
-        confirmationLevel: window.price,
-        index: window.closes.length - 1,
-        indices: [window.closes.length - 3, window.closes.length - 2, window.closes.length - 1]
-    };
-    console.log("✅ Triple Bottom simulé :", window.tripleBottomResult);
-
-    // Créer l’activeTrade via la fonction
-    const pattern = {
-    type: "triple",
-    entry: window.tripleBottomResult.entryPrice,
-    name: "Triple Bottom",
-    minValue: window.tripleBottomResult.minValue
+// 🚀 Bouton pour tester le déclenchement du signal
+document.getElementById("simulate-test-signal").addEventListener("click", () => {
+    
+    // 🚀 Test rapide 
+    const testPattern = {
+        type: "manual",
+        entry: 1.23456,   // prix fictif
+        name: "Test Signal"
     };
 
-    // Utiliser ta fonction 2 pour créer le trade
-    createActiveTrade(pattern, config);
+    // 1️ Créer le trade actif
+    createActiveTrade(testPattern, config);
 
-    console.log("💰 ACTIVE TRADE créé :", window.activeTrade);
+    // 2️ Envoyer le trade au backend avec le vrai selectedPair
+    executeBuyTrade(testPattern, config, window.selectedPair);
 
-   // Optionnel : déclencher le check TP/SL immédiatement
-    if (typeof simulateTrading === "function") {
-        simulateTrading();  // vérifie TP/SL/Trailing sur ce prix simulé
-    }
+    console.log("💡 Signal manuel déclenché :", testPattern, window.selectedPair);
+	console.log("DEBUG executeBuyTrade - selectedPair :", window.selectedPair);
 });
+
+
+
+
+
+
 
 
 //Simuler un Stop Loss
